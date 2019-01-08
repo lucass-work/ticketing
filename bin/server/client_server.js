@@ -1,54 +1,91 @@
 "use strict";
 
 /*
-client server that handles tickets.
-
-Client server connects to the main server by tls and has a set number of tickets shared with it, this server
-then handles all info with the tickets until the info is complete then access' the main server with
+The client server which handles tickets and interacts with requests sent by the main server.
  */
 
 let tls = require('tls');
 let https = require('https');
 let fs = require('fs');
+let path = require('path');
+let auth = require('./auth');
+
+let server_socket,
+    server;
+let client_id = -1;
+let key_path = path.join(__dirname,"../keys");
+const port = 8081;
+
+const server_options = {
+    key : fs.readFileSync(path.join(key_path,"/client_key.pem")),
+    cert : fs.readFileSync(path.join(key_path, "/client_cert.pem")),
+};
+
+/**
+ * Create the client server
+ */
+function create_server(){
+    server = tls.createServer(server_options,(socket)=>{
+        server_socket = socket;
+    });
+
+    server_socket.on("error",(err)=>{console.log(err.toString())});
+
+    server_socket.on("data",(data)=>{server_update(data)});
+
+    server_socket.listen(port);
+}
 
 
-    constructor(id,port,host){
-        this.options = {
-            ca : [fs.readFileSync(path.join(__dirname,"../keys/main_cert.pem"))],//we are using a self signed cert
-            host : host,
-            port : port,
-            id : id
-        };
-
-        this.connect();
+/**
+ * alert the main server that this client server is being closed.
+ */
+function destroy_server(){
+    if(!server){
+        return;
     }
 
-    /**
-     * Connect to the main server
-     */
-    connect(){
-        let socket = this.socket = tls.connect(this.options,()=>{
-            console.log(`client ${this.options.id} connected`);
-        });
+    let request = {
+        cmd : "DISCONNECT",
+        id : client_id
+    };
 
-        socket.on("data",(data)=>{
-            this.server_update(data);
-        });
-
-        socket
-    }
-
-    /**
-     * handle a server update
-     * @param data the data sent by the server
-     */
-    server_update(data){
-
-    }
-
+    send(request);
+    server.close();
 
 }
+
+/**
+ * Sends a data object on the current server_socket if it exists
+ * @param data the data to be sent.
+ */
+function send(data){
+    if(!server_socket){
+        console.log("Unable to send data as no server exists");
+        return;
+    }
+
+    server_socket.send(JSON.stringify(data));
+}
+
+function server_update(data){
+    let options = JSON.parse(data);
+
+    switch(options.cmd){
+        default:
+            console.log(`invalid command on client ${client_id} server_update`);
+            return;
+        case "INIT":
+            client_id = options.id;
+            //now authorise
+
+            return;
+        case "TICKET":
+            return;
+    }
+}
+
 
 module.exports = {
-    client_server : client_server,
-}
+
+};

@@ -3,6 +3,7 @@
 let tls = require('tls');
 let fs = require('fs');
 let path = require('path');
+let auth = require('./auth');
 
 const key_path = path.join(__dirname,"../","/keys");
 
@@ -38,29 +39,35 @@ function client_update(data){
 
 
 
-
 /*
 Client handling
  */
 
 const base_socket = 8081; //client server socket is server_id + base_socket.
 const host = "localhost";
-let free_client_ids = []; //list of free client ids, checked when a new server is added to not waste sockets.
 let clients = [];
+let client_ids = [];
 let tickets = [];//each ticket is an id associated with an entry in the SQL database //todo SQL stuff.
+
+//setup the auth secret
+auth.load_secret(path.join(key_path,"/secret.txt"));
 
 /**
  * create a client server and add it to the clients.
  * @returns client id.
  */
-function connect_client(){
-    let client_id = clients.length;
+function connect_client(host,port){
+    /*
+    in order to ensure we are connecting to a genuine client server and that the client server knows that we are the
+    genuine main server we need to share some common info, this will be a hash of the client_id and a piece of shared data,
+    this ensures that even if this client server is not genuine it will not be able to "pretend" to be us an connect to
+    other client servers using our secret data without direct access to this server.
+     */
+    let client_id = auth.gen_id(client_ids);
 
-    if(free_client_ids.length !== 0){
-        client_id = free_client_ids.pop();
-    }
+    client_ids.push(client_id);
 
-    let client = new client_server(client_id,client_id + base_socket, host);
+    let client = new client_server(client_id,host,port);
     clients.push(client);
 }
 
@@ -112,12 +119,17 @@ class client_server{
      * @param port the port the client connection is on
      * @param host the client host
      */
-    constructor(id,port,host){
+    constructor(id,host,port){
         this.options = {
             ca : [fs.readFileSync(path.join(__dirname,"../keys/client_cert.pem"))],//we are using a self signed cert
             host : host,
             port : port,
-            id : id
+            id : id,
+        };
+
+        this.auth = {
+            auth_code : auth.get_auth(id),
+            authorised : false
         };
 
         this.connect();
@@ -132,10 +144,10 @@ class client_server{
         });
 
         socket.on("data",(data)=>{
-            this.server_update(data);
+            this.update(data);
         });
 
-        socket
+        socket.on("error",(error)=>{console.log(error)});
     }
 
     /**
@@ -149,12 +161,37 @@ class client_server{
      * handle a client_server update
      * @param data the data sent by the client_server
      */
-    server_update(data){
+    update(data){
+        let message = JSON.parse(data);
+        switch(message.cmd){
+            default:
+                console.log(`Invalid command received from client ${this.options.id}`);
+                return;
+            case "AUTH":
+                this.authorise(message.data);
+                return;
+        }
+    }
 
+    authorise(code){
+        let {auth_code,authorised} = this.auth;
+
+        if(code === auth_code){
+            authorised = true;
+        }
     }
 
     send_tickets(){
 
+    }
+
+    send(data){
+        if(!this.socket){
+            console.log("Cannot send to client, no socket exists");
+            return;
+        }
+
+        this.socket.send(JSON.stringify(data));
     }
 
 
