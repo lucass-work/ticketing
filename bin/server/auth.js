@@ -6,26 +6,39 @@ let crypto = require('crypto');
 Generates the hash info for our server.
  */
 
-let secret;
+let client_secret,server_secret;
 const id_length = 100;
 
-function load_secret(file){
-    secret = fs.readFileSync(file);
+/**
+ * load the client and server secrets
+ * @param client the path of the client secret
+ * @param server the path of the server secret
+ */
+function load_secrets(client,server){
+    client_secret = fs.readFileSync(client);
+    server_secret = fs.readFileSync(server);
 }
 
 /**
- * Generate an auth code for the given Id and currently loaded secret.
+ * Generate an auth code for the given client Id and currently loaded client secret.
  * @param id the client id to generate the auth for.
+ * @param server true if this is the server secret false if it is the client secret.
  * @returns {PromiseLike<ArrayBuffer>}
  */
-function get_auth(id){
-    if(!secret){
-        console.log("Cannot generate auth as no secret loaded");
-        return;
-    }
+function get_auth(id,server = false){
     let hash = crypto.createHash("sha256");
 
-    return hash.update(secret + id).digest("hex");
+    server ? hash.update(server_secret + id) : hash.update(client_secret + id);
+
+    return hash.digest("hex");
+}
+
+/**
+ * Generate an auth code for the given server id and currently loaded server secret.
+ * @param id
+ */
+function get_client_auth(id){
+
 }
 
 /**
@@ -44,7 +57,7 @@ function gen_id(ids){
 }
 
 module.exports = {
-    load_secret : load_secret.apply,
+    load_secrets : load_secrets,
     get_auth : get_auth,
     gen_id : gen_id,
-}
+};

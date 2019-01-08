@@ -4,41 +4,9 @@ let tls = require('tls');
 let fs = require('fs');
 let path = require('path');
 let auth = require('./auth');
+let tickets = require('../tickets/tickets');
 
 const key_path = path.join(__dirname,"../","/keys");
-
-/*
-Server handling
- */
-
-const options = {
-    key : fs.readFileSync(path.join(key_path,"/main_key.pem")),
-    cert : fs.readFileSync(path.join(key_path, "/main_cert.pem")),
-};
-
-let server;
-
-function create_server(){
-    server = tls.createServer(options,(socket)=>{
-
-    });
-
-    server.on("error",(err) =>{
-       console.log(err);
-    });
-
-    server.on("data",(data) => client_update(data));
-
-
-    server.listen(8080);
-}
-
-function client_update(data){
-
-}
-
-
-
 /*
 Client handling
  */
@@ -47,22 +15,20 @@ const base_socket = 8081; //client server socket is server_id + base_socket.
 const host = "localhost";
 let clients = [];
 let client_ids = [];
-let tickets = [];//each ticket is an id associated with an entry in the SQL database //todo SQL stuff.
 
 //setup the auth secret
-auth.load_secret(path.join(key_path,"/secret.txt"));
+auth.load_secrets(path.join(key_path,"/client_secret.txt"),path.join(key_path,"/server_secret.txt"));
+//setup main server auth codes
+let server_id = auth.gen_id([]);
+client_ids.push(server_id);//so that we dont get conflicts with client ids.
+let server_auth = auth.get_auth(server_id,true);
 
 /**
  * create a client server and add it to the clients.
  * @returns client id.
  */
 function connect_client(host,port){
-    /*
-    in order to ensure we are connecting to a genuine client server and that the client server knows that we are the
-    genuine main server we need to share some common info, this will be a hash of the client_id and a piece of shared data,
-    this ensures that even if this client server is not genuine it will not be able to "pretend" to be us an connect to
-    other client servers using our secret data without direct access to this server.
-     */
+
     let client_id = auth.gen_id(client_ids);
 
     client_ids.push(client_id);
@@ -75,16 +41,30 @@ function connect_client(host,port){
  * Removes a client without disconnecting them.
  * @param id the client id
  */
-function remove_client(id){
+function disconnect_client(id){
+    //remove the client and client id from the lists.
+    let index = clients.findIndex((el) => {return el.options.id === id});
 
+    if(index === -1){
+        return;
+    }
+
+    let client = clients[index];
+    clients.splice(index,1);
+
+    for(let i = 0;i < client_ids.length;i++){
+        if(client_ids[i] === id){ client_ids.splice(i,1) };
+    }
+    //get the client to disconnect.
+    client.disconnect();
 }
 
 /**
- * disconnects and removes a client.
- * @param id the client id
+ * returns all current client servers
+ * @returns {*[]}
  */
-function disconnect_client(id){
-
+function get_clients(){
+    return clients.slice();
 }
 
 /**
@@ -95,7 +75,7 @@ function distribute_tickets(){
     if(clients.length === 0){
         console.log("No client servers connected");
     }
-
+    let tickets = tickets.get_tickets();
     let tickets_per = Math.floor(tickets.length / clients.length);//all excess tickets are given to the first server.
     let current_ticket = 0;
 
@@ -108,6 +88,9 @@ function distribute_tickets(){
         clients[0].send_tickets(tickets.slice(current_ticket,tickets.length));
     }
 }
+
+
+
 
 /*
 Client server class that allows simpler interaction with the client_server
@@ -124,12 +107,21 @@ class client_server{
             ca : [fs.readFileSync(path.join(__dirname,"../keys/client_cert.pem"))],//we are using a self signed cert
             host : host,
             port : port,
-            id : id,
+        };
+
+        this.ids = {
+            client_id : id,
+            server_id : server_id,
         };
 
         this.auth = {
             auth_code : auth.get_auth(id),
             authorised : false
+        };
+
+        this.client_data = {
+            queue_length : 0,
+            tickets_remaining : 0,
         };
 
         this.connect();
@@ -139,8 +131,16 @@ class client_server{
      * Connect to the client.
      */
     connect(){
-        let socket = this.socket = tls.connect(this.options,()=>{
-            console.log(`connected to client ${this.options.id}`);
+        let socket = this.socket = tls.connect(this.options,()=>{});
+
+        let request = this.ids;
+
+        //once successfully connected send over the INIT request to start authorisation check.
+        socket.on("secureConnect",()=>{
+           this.send({
+               cmd : "INIT",
+               ...request,
+           });
         });
 
         socket.on("data",(data)=>{
@@ -151,10 +151,13 @@ class client_server{
     }
 
     /**
-     * Disconnect from the client.
+     * destroy this client
      */
-    disconnect(){
-
+    destroy(){
+        if(this.socket){
+            this.socket.destroy();
+            this.socket = null;
+        }
     }
 
     /**
@@ -162,51 +165,150 @@ class client_server{
      * @param data the data sent by the client_server
      */
     update(data){
-        let message = JSON.parse(data);
+        let message = JSON.parse(data.toString());
         switch(message.cmd){
             default:
-                console.log(`Invalid command received from client ${this.options.id}`);
+                console.log(`Invalid command ${message.cmd} received from client ${this.ids.client_id}`);
                 return;
+
             case "AUTH":
-                this.authorise(message.data);
+                this.authorise(message.auth_code);
+                return;
+
+            case "SYNC":
+                this.sync(message);
+                return;
+
+            case "CONNECTION":
+                this.ticket_connection(message);
                 return;
         }
     }
 
+    /*code for handling the ticket events
+
+     */
+
+    /**
+     * sync stored info with serverside info.
+     * @param data data to be synced.
+     */
+    sync(data){
+        this.client_data = data;
+    }
+
+    /**
+     * add one or more connections to the list of currently connected.
+     * @param data a list of mac address'
+     */
+    ticket_connection(data){
+        connected_macs.push(data.mac);
+        queued_macs.remove_item(data.mac);
+    }
+
+    /**
+     * remove one or more connections from the list of currently connected
+     * @param data a list of mac address'
+     */
+    ticket_disconnection(data){
+        connected_macs.remove_item(data.mac);
+    }
+
+    ticket_completed(data){
+        completed_macs.push(data.mac);
+        connected_macs.remove_item(data.mac);
+    }
+
+    send_tickets(tickets){
+        this.send({
+            cmd : "TICKETS",
+            tickets : tickets,
+        });
+    }
+
+    /*
+    End of code for tickets
+     */
+
+    /**
+     * Check if the given code matches the auth code for this client.
+     * @param code
+     */
     authorise(code){
         let {auth_code,authorised} = this.auth;
-
         if(code === auth_code){
             authorised = true;
+            this.send({
+                cmd : "AUTH",
+                auth_code : server_auth,
+            })
+        }
+
+        else{
+            console.log(`Unauthorised client ${this.ids.client_id} attempted to connect`);
+            this.send({ cmd : "DISCONNECT" });
+            this.socket.destroy();
         }
     }
 
-    send_tickets(){
-
-    }
 
     send(data){
         if(!this.socket){
             console.log("Cannot send to client, no socket exists");
             return;
         }
-
-        this.socket.send(JSON.stringify(data));
+        this.socket.write(JSON.stringify(data));
     }
-
-
 }
 
 /*
-Each client is its own server on it's own host, currently that is just this machine so local host, they all
-send a connection request to the server via port 8080 and then they are connected to via a separate connection
-on a different port.
+Each client is it's own server and this main_server distributes incoming ticket requests to each one of the servers based
+on the number of tickets still free on that server.
  */
 
+/*
+Connection handling, this handles redirects and ensures people currently viewing a ticket page can't reconnect and
+get another ticket at the same or get more than 1 ticket.
+ */
+
+let connected_macs = [];//list of currently connected across all servers
+let queued_macs = [];//list of currently redirecting mac address
+let completed_macs = [];//list of mac address' that have complete the form
+
+function request_redirect(connection){
+
+    if(connected_macs.includes(connection) || queued_macs.includes(connection) || completed_macs.includes(connection)){
+        return null;//if they've already completed the form , already connected or are connecting then dont allowing them
+        //to connect again.
+    }
+
+    let chosen_client;
+    let shortest_queue = -1;
+
+    for(let client of clients){
+        if(client.client_data.queue_length < shortest_queue || shortest_queue < 0){
+            chosen_client = client;
+            shortest_queue = client.client_data.queue_length;
+        }
+    }
+
+    if(!chosen_client){
+        console.log("Error, no client chosen for redirect");
+        return null;
+    }
+
+    queued_macs.push(connection);//prevent the user from connecting multiple times before fully redirected putting
+    //them in multiple queues.
+
+    return chosen_client.host + ":" + chosen_client.port;
+}
 
 module.exports = {
-    create_server: create_server,
-    add_client_server : add_client_server,
-    remove_client_server : remove_client_server,
-}
+    connect_client : connect_client,
+    disconnect_client: disconnect_client,
+    distribute_tickets : distribute_tickets,
+    request_redirect : request_redirect,
+    get_clients : get_clients,
+
+};
 
