@@ -19,7 +19,9 @@ function generate_tickets(amount){
         let ticket = {
             ...ticket_info,
             ticket_id : auth.gen_id(tickets),
-    }
+            token : null,
+            completed : false,
+    };
         tickets.push(ticket);
     }
 }
@@ -31,7 +33,7 @@ function set_ticket_info(name, cost){
     }
 }
 
-function get_tickets(){
+function get_tickets() {
     return tickets.slice();
 }
 

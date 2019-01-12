@@ -27,13 +27,13 @@ let server_auth = auth.get_auth(server_id,true);
  * create a client server and add it to the clients.
  * @returns client id.
  */
-function connect_client(host,port){
+function connect_client(host,port,https_port){
 
     let client_id = auth.gen_id(client_ids);
 
     client_ids.push(client_id);
 
-    let client = new client_server(client_id,host,port);
+    let client = new client_server(client_id,host,port,https_port);
     clients.push(client);
 }
 
@@ -101,12 +101,14 @@ class client_server{
      * @param id the id of the client
      * @param port the port the client connection is on
      * @param host the client host
+     * @param https_port the https_port of the client
      */
-    constructor(id,host,port){
+    constructor(id,host,port,https_port){
         this.options = {
             ca : [fs.readFileSync(path.join(__dirname,"../keys/client_cert.pem"))],//we are using a self signed cert
             host : host,
             port : port,
+            https_port : https_port,
         };
 
         this.ids = {
@@ -272,9 +274,14 @@ get another ticket at the same or get more than 1 ticket.
  */
 
 let connected_macs = [];//list of currently connected across all servers
-let queued_macs = [];//list of currently redirecting mac address
-let completed_macs = [];//list of mac address' that have complete the form
+let queued_macs = [];//list of currently redirecting connections
+let completed_macs = [];//list of connections that have complete the form
 
+/**
+ *
+ * @param connection
+ * @returns {*}
+ */
 function request_redirect(connection){
 
     if(connected_macs.includes(connection) || queued_macs.includes(connection) || completed_macs.includes(connection)){
@@ -297,10 +304,10 @@ function request_redirect(connection){
         return null;
     }
 
-    queued_macs.push(connection);//prevent the user from connecting multiple times before fully redirected putting
+    //queued_macs.push(connection);//prevent the user from connecting multiple times before fully redirected putting
     //them in multiple queues.
 
-    return chosen_client.host + ":" + chosen_client.port;
+    return "https://" + chosen_client.options.host + ":" + chosen_client.options.https_port;
 }
 
 module.exports = {

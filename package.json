@@ -14,6 +14,8 @@
     "morgan": "~1.9.0",
     "mysql": "^2.16.0",
     "pug": "2.0.0-beta11",
-    "random-number-csprng": "^1.0.2"
+    "random-number-csprng": "^1.0.2",
+    "socket.io": "^2.2.0",
+    "ws": "^6.1.2"
   }
 }

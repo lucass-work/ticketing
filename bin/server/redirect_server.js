@@ -18,9 +18,8 @@ function create_server() {
     app = express();
 
     app.get('/', (req, res) => {
-        let server = main_server.request_redirect(req.headers.host);
 
-        console.log(main_server.get_clients());
+        let server = main_server.request_redirect(req.ip);
 
         if (!server) {
             refuse_redirect(res);
@@ -28,6 +27,7 @@ function create_server() {
         }
 
         res.redirect(server);
+
 
     });//TODO flesh out into a proper webpage.
 
