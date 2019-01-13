@@ -92,9 +92,6 @@ function send(data){
 function server_update(data){
     let options = JSON.parse(data.toString());
     switch(options.cmd){
-        default:
-            console.log(`invalid command on client ${client_id} server_update`);
-            return;
 
         case "INIT":
             init(options);
@@ -137,6 +134,9 @@ function authorise(options){
     if(options.auth_code = server_auth){
         authorised = true;
         console.log(`Connection successfully authorised with client:${client_id}, server:${server_id}`);
+        send({
+            cmd : "AUTH_COMPLETE",
+        })
     }
     else{
         console.log(`server ${server_id} connected with an invalid auth_code, disconnecting`);
@@ -149,7 +149,10 @@ function authorise(options){
  * @param client
  */
 function remove_from_queue(client){
-    
+    send({
+        cmd : "CONNECTED",
+        ip : client.connection.ip,
+    });
 }
 
 /*
@@ -157,11 +160,16 @@ Ticket handling
  */
 
 let ticket = require('../tickets/tickets');
-
 let tickets = [];
+//init the tickets
 
+/**
+ * setup the ticket module and our tickets array
+ * @param options the message object containing the tickets.
+ */
 function handle_tickets(options){
-    tickets = options.tickets;
+    ticket.set_tickets(options.tickets);
+    tickets = ticket.get_tickets();
 }
 
 /**
@@ -246,8 +254,8 @@ function create_https_server(port = https_port, options = https_options){
         server : https_server,
     });
 
-    ws_server.on('connection',(ws)=>{
-        add_client(ws);
+    ws_server.on('connection',(ws,req)=>{
+        add_client(ws,req.connection.remoteAddress);
     });
 
 }
@@ -262,22 +270,21 @@ function destroy_https_server(){
 
 }
 
-function add_client(socket){
+function add_client(socket,ip){
     if(!server_socket){
         console.log("No TLS server exists");
         return;
     }
 
-    let ip = socket.localAddress + socket.localPort;
     let client = get_client(ip);
 
-    if(client){
+    if(client) {
         console.log("socket already connected");
         client.set_socket(socket);
         return;
     }
 
-    client = new web_client(socket);
+    client = new web_client(socket,ip);
     web_clients.push(client);
     console.log("new client added");
 
@@ -291,7 +298,7 @@ function remove_client(client){
     //free up the ticket if not complete
     if(client.ticket){
         if(!client.ticket.completed){
-            ticket.token = undefined;
+            ticket.refresh_ticket(client.ticket);
         }
     }
 
@@ -303,6 +310,11 @@ function remove_client(client){
 
     if(index !== -1) web_clients.splice(index,1);
 
+    //tell the main server this client has disconnected and is allowed to reconnect later.
+    send({
+        cmd : "DISCONNECTED",
+        ip : client.connection.ip,
+    })
 }
 
 function clear_clients(){
@@ -318,23 +330,48 @@ browser tabs then they will all share the same token and thus will only be able 
  */
 
 
-
 class web_client{
-    constructor(socket){
-        this.connection = {
+    constructor(socket,ip){
+
+        let {token} = this.connection = {
             token : auth.gen_id(client_tokens),//prevent the client from getting other clients tickets *cough* moonpig *cough*
-            ip : socket.localAddress + socket.localPort,
+            ip: ip,
             closed : false,
         };
 
-        client_tokens.push(this.connection.token);
+        console.log(ip);
+
+        client_tokens.push(token);
 
         this.set_socket(socket);
+        //complete our connection with the main server.
+        send({
+            cmd: "CONNECTED",
+            ip: ip,
+        });
+
+        /*
+        Setup our ticket
+         */
+
+        let ticket = this.ticket = get_fresh_ticket();
+        if(!ticket){
+            this.send({
+                cmd : "NO_TICKET", // :(
+            });
+            //redirect to home page
+
+            return;
+        }
+
+        this.send_ticket();
+
     }
 
     set_socket(socket){
+
         if(this.connection.socket) {
-            this.connection.socket.destroy();
+            this.connection.socket.close();
         }
 
         socket.on("message",(data)=>{
@@ -351,6 +388,8 @@ class web_client{
         });
 
         this.connection.socket = socket;
+
+        remove_from_queue(this);
     }
 
     disconnect(){
@@ -377,12 +416,11 @@ class web_client{
         }
     }
 
-    set_ticket(ticket){
-        this.ticket = ticket;
-    }
-
     send_ticket(){
-
+        this.send({
+            cmd : "TICKET",
+            ticket : ticket.sanitize_ticket(this.ticket),
+        });
     }
 
     send(data){
@@ -391,7 +429,7 @@ class web_client{
             console.log("Error no socket exists");
             return;
         }
-        socket.write(JSON.stringify(data));
+        socket.send(JSON.stringify(data));
     }
 }
 
@@ -406,8 +444,6 @@ function get_client(ip){
         }
     }
 }
-
-
 
 
 

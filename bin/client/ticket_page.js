@@ -1,31 +1,22 @@
 "use strict";
 
-let token;
+let ticket;
 
 let socket = new WebSocket("wss" + window.location.href.slice(5));
 socket.addEventListener('open', function (event) {
-    socket.send('Hello Server!');
+    //
 });
 
 socket.onmessage = (message) =>{
-    let options = JSON.parse(message.toString());
+    let options = JSON.parse(message.data.toString());
     switch(options.cmd){
         default :
-            console.log("Invalid command received");
+            console.log(`Invalid command received ${options.cmd}`);
             return;
-        case "SET_TOKEN":
-            token = options.token;
-            return;
-        case "GET_TOKEN":
-            send({
-                cmd : "CHECK_TOKEN",
-                token : token,
-            });
+        case "TICKET" :
+            ticket = options.ticket;
+            console.log(`Ticket received ${ticket}`);
     }
-};
-
-socket.onopen = ()=>{
-    console.log("connection opened");
 };
 
 function send(data){
@@ -35,3 +26,11 @@ function send(data){
     socket.send(JSON.parse(data));
 }
 
+/*
+Ticket has format :
+Name,
+Price,
+Desc,
+
+ticket_id.
+ */
