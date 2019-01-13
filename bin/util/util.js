@@ -11,7 +11,13 @@ Util methods, TODO move these to proper prototypes.
  * @returns {number} the index;
  */
 function remove_item(array,item){
-    let index = array.indexOf(item);
+    let index = -1;
+    for(let i = 0 ; i < array.length;i++){
+        if(array[i] === item){
+            index = i;
+            break;
+        }
+    }
     if(index !== -1) array.splice(index,1);
     return index;
 }

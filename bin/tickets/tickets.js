@@ -2,6 +2,7 @@
 
 let auth = require('../server/auth');
 let util = require('../util/util');
+let sql = require('mysql');
 /*
 Ticket handling code
  */
@@ -23,7 +24,6 @@ function generate_tickets(amount){
             ticket_id : auth.gen_id(ticket_ids),
             token : undefined,
             completed : false,
-            SQL_id : i,//MUST be removed before the ticket is sent.
         };
         tickets.push(ticket);
         ticket_ids.push(ticket.ticket_id);
@@ -84,6 +84,64 @@ function get_tickets() {
     return tickets.slice();
 }
 
+/*
+SQL handling
+ */
+/*
+For testing im using
+{
+    host: "localhost",
+    user: "root",
+    password: "password",
+    database: "ticketdb",
+}
+ */
+
+let database;
+
+/**
+ * Set the SQL database for the tickets
+ * @param options
+ * @param callback called once the connection is established
+ */
+function set_sql_database(options,callback = () => {}){
+    database = sql.createConnection(options);
+    database.connect((err) => {
+        console.log(err ? err : "connected to SQL database");
+        callback();
+    });
+}
+
+/**
+ * Load the ticket info from the SQL database
+ * @param callback called once the tickets are successfully loaded.
+ */
+function load_tickets(callback = () => {}){
+    if(!database){
+        console.log("Error no database setup");
+        return;
+    }
+
+    let tickets = [];
+    database.query("SELECT * FROM tickets",(err,results,values)=>{
+        for(let result of results){
+            tickets.push({
+                ...ticket_info,
+                ticket_id : result.ticket_id,
+                token : undefined,
+                completed : result.completed,
+            });
+        }
+    });
+
+    set_tickets(tickets);
+
+}
+
+function get_sql_ticket(){
+
+}
+
 module.exports = {
     generate_tickets : generate_tickets,
     get_tickets : get_tickets,
@@ -91,4 +149,7 @@ module.exports = {
     sanitize_ticket : sanitize_ticket,
     refresh_ticket : refresh_ticket,
     set_tickets : set_tickets,
+    set_sql_database : set_sql_database,
+    load_tickets : load_tickets,
+    get_sql_ticket : get_sql_ticket,
 }

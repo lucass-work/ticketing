@@ -73,6 +73,10 @@ function get_clients(){
     return clients.slice();
 }
 
+/*
+Ticket code
+ */
+
 /**
  * Sends tickets to all the current client servers.
  * All clients you wish to send these tickets to must be connected before this is called.
@@ -97,10 +101,30 @@ function distribute_tickets(){
     }
 }
 
-function init_tickets(name,desc,cost,amount){
+
+/**
+ * Generates a new batch of tickets and returns the new table name.
+ * @param name name of the tickets
+ * @param desc description of the tickets
+ * @param cost cost of the tickets
+ * @param amount amount the tickets will cost
+ * @param table_name name of the table to create the tickets into.
+ */
+function create_tickets(name,desc,cost,amount,table_name = null){
     tickets.set_ticket_info(name,desc,cost);
     tickets.generate_tickets(amount);
+    
 }
+
+function init_tickets(name,desc,cost,amount,SQL_options){
+    tickets.set_ticket_info(name,desc,cost);
+    tickets.generate_tickets(amount);
+    tickets.set_sql_database(SQL_options,()=>{
+        tickets.load_tickets();
+    });
+}
+
+
 
 
 /*
@@ -286,7 +310,7 @@ let completed = [];//list of connections that have complete the form
  */
 function request_redirect(connection){
 
-    console.log(`connection requested ${connection}`);
+    console.log(`${connected} + ${queue}`);
 
     if(completed.includes(connection)){
         //send them back to the homepage
@@ -326,7 +350,9 @@ function request_redirect(connection){
  */
 function web_client_connected(ip){
     util.remove_item(queue,ip);
-    connected.push(ip);
+    if(!connected.includes(ip)) {
+        connected.push(ip);
+    }
 }
 
 
@@ -336,7 +362,9 @@ function web_client_connected(ip){
  */
 function web_client_completed(ip){
     util.remove_item(connected,ip);
-    completed.push(ip);
+    if(!completed.includes(ip)) {
+        completed.push(ip);
+    }
 }
 
 /**
@@ -346,7 +374,6 @@ function web_client_completed(ip){
 function web_client_disconnected(ip){
     util.remove_item(queue,ip);
     util.remove_item(connected,ip);
-    console.log(`client disconnect ${ip}`);
 }
 
 module.exports = {

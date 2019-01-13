@@ -462,6 +462,9 @@ where the client_id and server_id's are salt.
 Would be better to use RSA instead that way the server key isn't compromised if a client is and vice versa.
  */
 
+//TODO add a redirect check , make sure the client can't just directly connect to this page.
 /*
-client tokens
+Idea is to send a connection token to the client when the main server redirects, this token is unqiue each time it is generated,
+this is stored in cookies and then when the connection is made to this server the token is verified with the main server.
+If a direct connection is made and no token check is received for 5 seconds then the connection is refused. Just need to implemented it
  */
