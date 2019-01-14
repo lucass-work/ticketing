@@ -20,13 +20,23 @@ function generate_tickets(amount){
     tickets = [];
 
     for(let i = 0;i < amount;i++){
-        let ticket = {
-            ticket_id : auth.gen_id(ticket_ids),
-            token : undefined,
-            completed : false,
-        };
+        let ticket = new_ticket();
         tickets.push(ticket);
         ticket_ids.push(ticket.ticket_id);
+    }
+}
+
+/**
+ * Generates a new empty ticket, does not add it to tickets or ticket_ids
+ */
+function new_ticket(){
+    return {
+        ...ticket_info,
+        ticket_id : auth.gen_id(ticket_ids),
+        token : undefined,
+        completed : false,
+        client_name : "",
+        client_gender : 'N',
     }
 }
 
@@ -42,12 +52,28 @@ function sanitize_ticket(ticket){
 }
 
 /**
+ * returns an uncompleted ticket
+ * @returns {*}
+ */
+function get_fresh_ticket(){
+    for(let ticket of tickets){
+        if(!ticket.completed){
+            return ticket;
+        }
+    }
+}
+
+/**
  * Refresh a ticket to prevent it from being spoofed by a client
  */
 function refresh_ticket(ticket){
     util.remove_item(ticket_ids,ticket.ticket_id);
+    let old_id = ticket.ticket_id;
     ticket.ticket_id = auth.gen_id(ticket_ids);
     ticket.token = undefined;
+    //now update the SQL database
+    set_ticket(ticket,old_id);
+
     return ticket;
 }
 
@@ -61,7 +87,7 @@ function set_ticket_info(name,desc, cost){
     ticket_info = {
         name : name,
         desc : desc,
-        cost : cost,
+        price : cost,
     }
 }
 
@@ -85,7 +111,8 @@ function get_tickets() {
 }
 
 /*
-SQL handling
+SQL handling, client_servers don't use this so the below code is mainly used for setting the tickets array and
+keeping the SQL database, if it exists , up to date.
  */
 /*
 For testing im using
@@ -98,16 +125,19 @@ For testing im using
  */
 
 let database;
+let table;
 
 /**
  * Set the SQL database for the tickets
  * @param options
  * @param callback called once the connection is established
+ * @param tab the table we will be accessing, defaults to tickets
  */
-function set_sql_database(options,callback = () => {}){
+function set_sql_database(options,callback = () => {},tab = "tickets"){
     database = sql.createConnection(options);
     database.connect((err) => {
         console.log(err ? err : "connected to SQL database");
+        table = tab;
         callback();
     });
 }
@@ -118,19 +148,23 @@ function set_sql_database(options,callback = () => {}){
  */
 function load_tickets(callback = () => {}){
     if(!database){
-        console.log("Error no database setup");
+        console.log("Cannot load tickets no database setup");
         return;
     }
 
     let tickets = [];
-    database.query("SELECT * FROM tickets",(err,results,values)=>{
+    database.query(`SELECT * FROM ${table}`,(err,results,values)=>{
+        if(!results){
+            console.log(`could not load tickets from ${table}`);
+            return;
+        }
         for(let result of results){
-            tickets.push({
-                ...ticket_info,
-                ticket_id : result.ticket_id,
-                token : undefined,
-                completed : result.completed,
-            });
+            let ticket = new_ticket();
+            ticket.completed = result.completed;
+            ticket.ticket_id = result.ticket_id;
+            ticket.client_name = result.client_name;
+            ticket.client_gender = result.client_gender;
+            tickets.push(ticket);
         }
     });
 
@@ -138,7 +172,21 @@ function load_tickets(callback = () => {}){
 
 }
 
-function get_sql_ticket(){
+function set_ticket(ticket,ticket_id) {
+    if (!database) {
+        console.log("Cannot set tickets no database setup");
+        return;
+    }
+
+    database.query(`
+    UPDATE ${table} 
+    client_name = ${ticket.client_name} 
+    client_gender = ${ticket.client_gender} 
+    ticket_id = ${ticket.ticket_id} 
+    completed = ${ticket.completed}
+    WHERE ticket_id = ${ticket_id}`
+        , (err, results, values) => {});
+
 
 }
 
@@ -147,9 +195,10 @@ module.exports = {
     get_tickets : get_tickets,
     set_ticket_info : set_ticket_info,
     sanitize_ticket : sanitize_ticket,
+    get_fresh_ticket : get_fresh_ticket,
     refresh_ticket : refresh_ticket,
     set_tickets : set_tickets,
     set_sql_database : set_sql_database,
     load_tickets : load_tickets,
-    get_sql_ticket : get_sql_ticket,
-}
+
+};

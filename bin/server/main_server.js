@@ -102,19 +102,6 @@ function distribute_tickets(){
 }
 
 
-/**
- * Generates a new batch of tickets and returns the new table name.
- * @param name name of the tickets
- * @param desc description of the tickets
- * @param cost cost of the tickets
- * @param amount amount the tickets will cost
- * @param table_name name of the table to create the tickets into.
- */
-function create_tickets(name,desc,cost,amount,table_name = null){
-    tickets.set_ticket_info(name,desc,cost);
-    tickets.generate_tickets(amount);
-    
-}
 
 function init_tickets(name,desc,cost,amount,SQL_options){
     tickets.set_ticket_info(name,desc,cost);
