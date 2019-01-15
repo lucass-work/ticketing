@@ -1,6 +1,7 @@
 "use strict";
 
 let ticket;
+let client_info;
 
 let socket = new WebSocket("wss" + window.location.href.slice(5));
 socket.addEventListener('open', function (event) {
@@ -35,6 +36,17 @@ function set_ticket(t){
 
 function buy_ticket(){
     console.log("ticket bought");
+    client_info = {
+        name :  get("name"),
+    };
+
+    console.log(client_info.name);
+
+    send({
+        cmd : "COMPLETE_TICKET",
+        ticket : client_info,
+    });
+
 }
 
 function send(data){
@@ -45,13 +57,13 @@ function send(data){
 }
 
 function set_html(id,HTML){
-    let el = get_html(id);
+    let el = get(id);
     if(el){
         el.innerHTML = HTML;
     }
 }
 
-function get_html(id){
+function get(id){
     return document.getElementById(id);
 }
 

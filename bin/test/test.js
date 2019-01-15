@@ -1,13 +1,7 @@
 "use strict";
 
-let sql = require('mysql');
+let t1 = require("./test1");
+let t2 = require("./test2");
 
-let connection = sql.createConnection({
-    host: "localhost",
-    user: "root",
-    password: "password",
-});
-
-connection.connect((err)=>{
-    console.log(err ? err : "connected");
-});
+t1.check();
+console.log(t2.get_list());

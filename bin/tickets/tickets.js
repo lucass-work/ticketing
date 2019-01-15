@@ -37,6 +37,7 @@ function new_ticket(){
         completed : false,
         client_name : "",
         client_gender : 'N',
+        queued : false,
     }
 }
 
@@ -57,7 +58,8 @@ function sanitize_ticket(ticket){
  */
 function get_fresh_ticket(){
     for(let ticket of tickets){
-        if(!ticket.completed){
+        if(!ticket.completed && !ticket.queued){
+            ticket.queued = true;
             return ticket;
         }
     }
@@ -70,7 +72,7 @@ function refresh_ticket(ticket){
     util.remove_item(ticket_ids,ticket.ticket_id);
     let old_id = ticket.ticket_id;
     ticket.ticket_id = auth.gen_id(ticket_ids);
-    ticket.token = undefined;
+    ticket.queued= false;
     //now update the SQL database
     set_ticket(ticket,old_id);
 
@@ -107,7 +109,32 @@ function set_tickets(ticket){
  * Get a copy of tickets.
  */
 function get_tickets() {
-    return tickets.slice();
+    let free_tickets = [];
+
+    for(let ticket of tickets){
+        if(!ticket.completed){
+            free_tickets.push(ticket);
+        }
+    }
+    return free_tickets;
+}
+
+function get_free_length(){
+    let free = tickets.length;
+    for(let ticket of tickets){
+        if(ticket.queued || ticket.completed){
+            free--;
+        }
+    }
+    return free;
+}
+
+function set_ticket(ticket){
+    for(let t of tickets){
+        if(t.ticket_id === ticket.ticket_id){
+            t = ticket;
+        }
+    }
 }
 
 /*
@@ -172,7 +199,7 @@ function load_tickets(callback = () => {}){
 
 }
 
-function set_ticket(ticket,ticket_id) {
+function set_sql_ticket(ticket,ticket_id) {
     if (!database) {
         console.log("Cannot set tickets no database setup");
         return;
@@ -200,5 +227,7 @@ module.exports = {
     set_tickets : set_tickets,
     set_sql_database : set_sql_database,
     load_tickets : load_tickets,
+    set_ticket : set_ticket,
+    get_free_length : get_free_length,
 
 };

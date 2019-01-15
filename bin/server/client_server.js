@@ -170,30 +170,37 @@ let tickets = [];
 function handle_tickets(options){
     ticket.set_tickets(options.tickets);
     tickets = ticket.get_tickets();
-}
-
-/**
- * returns a ticket with a matching token
- * @param token the token for the ticket
- * @returns {*} the ticket, null if it does not exist.
- */
-function get_ticket(token){
-    for(let ticket of tickets){
-        if(tickets.token === token){
-            return ticket;
-        }
-    }
+    send_free();
 }
 
 /**
  * returns a free ticket, if none are available returns null.
+ * returned ticket is queued
  */
 function get_fresh_ticket(){
     for(let ticket of tickets){
-        if(!ticket.token){
+        if(!ticket.completed && !ticket.queued){
+            ticket.queued = true;
             return ticket;
         }
     }
+}
+
+function complete_ticket(ticket){
+    ticket.completed = true;
+
+    send({
+        cmd : "COMPLETE_TICKET",
+        ticket : ticket
+    });
+}
+
+function send_free(){
+    send({
+        cmd : "FREE_TICKETS",
+        length : ticket.get_free_length(),
+    });
+
 }
 
 /*
@@ -364,6 +371,8 @@ class web_client{
             return;
         }
 
+        send_free();
+
         this.send_ticket();
 
     }
@@ -411,6 +420,11 @@ class web_client{
         switch(options.cmd) {
             default :
                 console.log("Invalid command received from web client");
+                return;
+
+            case "COMPLETE_TICKET":
+                this.ticket.client_info = options.client_info;
+                complete_ticket(this.ticket);
                 return;
 
         }

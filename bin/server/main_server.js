@@ -106,9 +106,17 @@ function distribute_tickets(){
 function init_tickets(name,desc,cost,amount,SQL_options){
     tickets.set_ticket_info(name,desc,cost);
     tickets.generate_tickets(amount);
-    tickets.set_sql_database(SQL_options,()=>{
+    /*tickets.set_sql_database(SQL_options,()=>{
         tickets.load_tickets();
-    });
+    });*/
+}
+
+function complete_ticket(ticket) {
+    if (!ticket) {
+        console.log("No ticket sent");
+        return;
+    }
+    tickets.set_ticket(ticket);
 }
 
 
@@ -145,10 +153,7 @@ class client_server{
             callback : callback,
         };
 
-        this.client_data = {
-            queue_length : 0,
-            tickets_remaining : 0,
-        };
+        this.free_tickets = 0;
 
         this.connect();
     }
@@ -216,6 +221,15 @@ class client_server{
             case "DISCONNECTED":
                 web_client_disconnected(message.ip);
                 return;
+
+            case "COMPLETE_TICKET":
+                complete_ticket(message.ticket);
+                return;
+
+            case "FREE_TICKETS":
+                this.free_tickets = message.length;
+                return;
+
         }
     }
 
@@ -297,8 +311,6 @@ let completed = [];//list of connections that have complete the form
  */
 function request_redirect(connection){
 
-    console.log(`${connected} + ${queue}`);
-
     if(completed.includes(connection)){
         //send them back to the homepage
         //TODO add homepage.
@@ -311,12 +323,13 @@ function request_redirect(connection){
     }
 
     let chosen_client;
-    let shortest_queue = -1;
+    let most_tickets = 0;
 
     for(let client of clients){
-        if(client.client_data.queue_length < shortest_queue || shortest_queue < 0){
+
+        if(client.free_tickets > most_tickets || most_tickets < 0){
             chosen_client = client;
-            shortest_queue = client.client_data.queue_length;
+            most_tickets = client.free_tickets;
         }
     }
 
