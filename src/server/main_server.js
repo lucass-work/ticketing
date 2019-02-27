@@ -7,7 +7,7 @@ let auth = require('./auth');
 let tickets = require('../tickets/tickets');
 let util = require('../util/util');
 
-const key_path = path.join(__dirname,"../","/keys");
+
 /*
 Client handling
  */
@@ -18,6 +18,17 @@ let client_ids = [];//list of used client_server id's.
 //setup main server auth codes
 let server_id = auth.gen_id([]);
 client_ids.push(server_id);//so that we dont get conflicts with client ids.
+
+//location of SSL certificates.
+let key_path = path.join(__dirname,"../","/keys");
+
+/**
+ * Sets the path to locate SSL Certificates.
+ * @param path
+ */
+function set_certificate_path(cert_path){
+    key_path = cert_path;
+}
 
 /**
  * Connects a client server and adds it to the connection list
@@ -124,6 +135,7 @@ function complete_ticket(client) {
 /*
 Handles interaction with an individual client server
  */
+
 class client_server_connection{
     /**
      * create a new client
@@ -131,11 +143,12 @@ class client_server_connection{
      * @param port the port the client connection is on
      * @param host the client host
      * @param https_port the https_port of the client
+     * @param client_pem , client certificate authority. Defaults to "client.pem"
      * @param callback, called when successfully authorised
      */
-    constructor(id,host,port,https_port,callback){
+    constructor(id,host,port,https_port,callback,client_pem="client.pem"){
         this.options = {
-            ca : [fs.readFileSync(path.join(__dirname,"../keys/client_cert.pem"))],//we are using a self signed cert
+            ca : [fs.readFileSync(path.join(key_path,client_pem))],//we are using a self signed cert
             host : host,
             port : port,
             https_port : https_port,
@@ -318,6 +331,6 @@ module.exports = {
     distribute_tickets : distribute_tickets,
     request_redirect : request_redirect,
     init_tickets : init_tickets,
-
+    set_certificate_path : set_certificate_path,
 };
 

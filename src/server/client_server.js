@@ -20,19 +20,42 @@ let client_id,
 
 let key_path = path.join(__dirname,"../keys");//SSL keys file path
 
-const server_port = 8081;
-
 //HTTPS and websocket SSL information.
-const server_options = {
-    key : fs.readFileSync(path.join(key_path,"/client_key.pem")),
-    cert : fs.readFileSync(path.join(key_path, "/client_cert.pem")),
-    rejectUnauthorized : false,//we are using a self signed certificate but use a real one if actually used.
-};
+let server_options;
+
+function set_certificate_path(cert_path){
+    key_path = cert_path;
+    server_options = {
+        key : fs.readFileSync(path.join(key_path,"/client_key.pem")),
+        cert : fs.readFileSync(path.join(key_path, "/client_cert.pem")),
+    };
+}
+
+/**
+ * Set the client_server and https_server server options. should not include port information.
+ * Requires SSL Key and Certificate.
+ * @param options
+ */
+function set_options(options){
+    server_options = options;
+}
 
 /**
  * Create the client server
+ * @param port, the TLS port
+ * @param options , the server options.
  */
-function connect_main_server(port = server_port,options = server_options){
+function create_client_server(port,options = server_options){
+
+    if(!options){
+        //load default options
+        options = {
+            key : fs.readFileSync(path.join(key_path,"/client_key.pem")),
+            cert : fs.readFileSync(path.join(key_path, "/client_cert.pem")),
+            rejectUnauthorized : false,//we are using a self signed certificate but use a real one if actually used.
+        };
+    }
+
     main_server = tls.createServer(options,(socket)=>{
         if(main_server_socket){//We only connect to a single main server.
             console.log("New connection attempted, rejecting.");
@@ -176,7 +199,7 @@ let ticket_page = fs.readFileSync(path.join(__dirname,"../client/ticket_page.htm
  * @param port the port for the HTTPs and WSS server
  * @param options arguements for the HTTPS server
  */
-function create_server(port = https_port, options = https_options){
+function create_https_server(port = https_port, options = https_options){
     https_server = https.createServer(options,(request,response)=>{Con
         let file_path = request.url;
         if(file_path === "/"){//First connection.
@@ -413,7 +436,9 @@ function get_web_client(ip){
 
 
 module.exports = {
-    create_server : create_server,
-    connect_main_server : connect_main_server,
+    create_client_server : create_client_server,
+    create_https_server : create_https_server,
+    set_options : set_options,
+    set_certificate_path : set_certificate_path,
 };
 
