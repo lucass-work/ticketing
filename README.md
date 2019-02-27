@@ -26,11 +26,9 @@ main_server.connect_client_server("localhost",TLS_PORT,HTTPS_PORT,()=>{
 });
 ```
 
-Where we have ```javascript connect_client_server(host,TLS_PORT,HTTPS_PORT, callback)```, the HTTPS_PORT is used to redirect
-web_clients when they have been assigned to this server. 
 Callback is called once a connection is fully established between the main_server and client_server, in this case it is being used 
 to generate tickets and distribute them between the servers.
-
+Where
 If we wish to handle redirection we can use the redirect_server module.
 
 ```javascript
