@@ -39,7 +39,7 @@ let redirect_server = require('./redirect_server');
 redirect_server.create_server();
 ```
 
-As noted in _Plans_ this is implemented directly with the main_server module and will change.
+As noted in _TODO_ this is implemented directly with the main_server module and will change.
 
 ### Certificates ###
 
