@@ -78,3 +78,6 @@ client_server.set_certificate_path(path);
 * Secure redirects, currently client_servers can be connected to directly which is an issue.
 * Handle web_client and client_server disconnections.
 * Allow for full server options to be set.
+* Add ability to assign individual certificates for each client_server.
+* Add connection tokens to web_clients to prevent multiple connections from the same person.
+* Expand SQL implementation.
