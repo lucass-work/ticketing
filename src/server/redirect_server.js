@@ -13,12 +13,12 @@ let app;
 
 const port = 8000;
 
+/**
+ * Create the redirect server.
+ */
 function create_server() {
-
-    app = express();
-
-    app.get('/', (req, res) => {
-
+    let on_request = (req,res) =>{
+        //Request and redirect to the assigned client_server.
         let server = main_server.request_redirect(req.ip);
 
         if (!server) {
@@ -27,24 +27,27 @@ function create_server() {
         }
 
         res.redirect(server);
+    };
 
-
-    });//TODO flesh out into a proper webpage.
-
+    //Create the express app and and handle connection to "/"
+    app = express();
+    app.get('/', on_request);
     app.listen(port);
-
 }
 
-function refuse_redirect(res){
-    res.setHeader("Content-Type","text/html");
-    res.end(redirect_failure);
-}
-
+//Load the redirect refused webpage.
 let redirect_failure;
 fs.readFile(path.join(html_path,"/redirect_refused.html"),(err,data) =>{
     redirect_failure = data.toString();
 });
 
+//Send the web_client the redirection refused wepage.
+function refuse_redirect(res){
+    res.setHeader("Content-Type","text/html");
+    res.end(redirect_failure);
+}
+
+
 module.exports = {
     create_server : create_server,
-}
+};

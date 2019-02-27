@@ -11,7 +11,8 @@ let fs = require('fs');
 
 let key_path = path.join(__dirname,"../keys");
 
-client_server.set_options({//set our client server options
+//set our client server options
+client_server.set_options({
     key : fs.readFileSync(path.join(key_path,"/client_key.pem")),
     cert : fs.readFileSync(path.join(key_path, "/client_cert.pem")),
 });

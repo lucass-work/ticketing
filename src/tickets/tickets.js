@@ -10,12 +10,12 @@ Ticket handling code
 let tickets = [];//each ticket is an id associated with an entry in the SQL database
 let ticket_ids = [];
 let ticket_info = {};
+
 /**
  * Generate the list of tickets.
  * @param ticket_info an object that has all information that will be put into each ticket.
  * @param amount the number of tickets to produce.
  */
-
 function generate_tickets(amount){
     tickets = [];
 
@@ -69,11 +69,14 @@ function get_fresh_ticket(){
  * Refresh a ticket to prevent it from being spoofed by a client
  */
 function refresh_ticket(ticket){
+    //Remove the old ticket id from the list of ids.
     util.remove_item(ticket_ids,ticket.ticket_id);
+
+    //Create a new ID and assign this to the ticket.
     let old_id = ticket.ticket_id;
+
     ticket.ticket_id = auth.gen_id(ticket_ids);
     ticket.queued= false;
-    //now update the SQL database
     set_ticket(ticket,old_id);
 
     return ticket;
@@ -174,17 +177,21 @@ function set_sql_database(options,callback = () => {},tab = "tickets"){
  * @param callback called once the tickets are successfully loaded.
  */
 function load_tickets(callback = () => {}){
+    //Cannot load ticket if a database does not exist.
     if(!database){
         console.log("Cannot load tickets no database setup");
         return;
     }
 
     let tickets = [];
-    database.query(`SELECT * FROM ${table}`,(err,results,values)=>{
+
+    //Add the retrieved tickets to the list of tickets.
+    let on_query = (err,results,values)=>{
         if(!results){
             console.log(`could not load tickets from ${table}`);
             return;
         }
+
         for(let result of results){
             let ticket = new_ticket();
             ticket.completed = result.completed;
@@ -193,18 +200,25 @@ function load_tickets(callback = () => {}){
             ticket.client_gender = result.client_gender;
             tickets.push(ticket);
         }
-    });
+        set_tickets(tickets);
+    };
 
-    set_tickets(tickets);
-
+    //Load the tickets from the SQL database.
+    database.query(`SELECT * FROM ${table}`,on_query);
 }
 
+/**
+ *
+ * @param ticket
+ * @param ticket_id
+ */
 function set_sql_ticket(ticket,ticket_id) {
     if (!database) {
         console.log("Cannot set tickets no database setup");
         return;
     }
 
+    //Update the entry with matching ticket_id.
     database.query(`
     UPDATE ${table} 
     client_name = ${ticket.client_name} 

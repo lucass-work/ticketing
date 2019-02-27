@@ -18,6 +18,7 @@ Ticket code
  * All clients you wish to send these tickets to must be connected before this is called.
  */
 function distribute_tickets(){
+    //Do not distribute tickets if no client_servers are connected.
     if(client_connections.length === 0){
         console.log("No client servers connected");
         return;
@@ -66,18 +67,19 @@ function complete_ticket(client) {
         console.log("No ticket sent");
         return;
     }
+
+    //Update stored ticket information and update web_client status.
     tickets.set_ticket(client.ticket);
     web_client_completed(client.ip);
 }
 
-
 /*
-Handles client connection and disconnection
+Handles client_server connection and disconnection
  */
 
-let client_connections = [];//list of client_server_connections
-let client_ids = [];//list of used client_server id's.
-client_ids.push(server_id);//prevent servers from being assigned this servers id.
+let client_connections = [];
+let client_ids = [];
+client_ids.push(server_id);
 
 /**
  * Connects a client server and adds it to the connection list
@@ -88,13 +90,14 @@ client_ids.push(server_id);//prevent servers from being assigned this servers id
  * @returns client id.
  */
 function connect_client_server(host,port,https_port,callback){
-
     //generate a client id and then add to the list of connected clients.
     let client_id = auth.gen_id(client_ids);
 
     client_ids.push(client_id);
 
+    //Connect to the client_server and add it to the list of connections.
     let client_connection = new client_server_connection(client_id,host,port,https_port,callback,cert_authority);
+
     client_connections.push(client_connection);
 }
 
@@ -102,8 +105,8 @@ function connect_client_server(host,port,https_port,callback){
  * Removes a client without disconnecting them.
  * @param id the client id
  */
-function disconnect_client(id){
-    //remove the client and client id from the lists.
+function disconnect_client_server(id){
+    //Retrieve the client server
     let index = client_connections.findIndex((el) => {return el.options.id === id});
 
     if(index === -1){
@@ -111,12 +114,16 @@ function disconnect_client(id){
     }
 
     let client = client_connections[index];
-    client_connections.splice(index,1);
 
+    //Remove client_server and client_id from their corresponding lists.
+    client_connections.splice(index,1);
     for(let i = 0; i < client_ids.length; i++){
-        if(client_ids[i] === id){ client_ids.splice(i,1) };
+        if(client_ids[i] === id){
+            client_ids.splice(i,1);
+            break;
+        }
     }
-    //get the client to disconnect.
+
     client.disconnect();
 }
 
@@ -155,13 +162,7 @@ class client_server_connection{
      * @param callback, called when successfully authorised
      */
     constructor(id,host,port,https_port,callback,client_pem){
-        this.options = {
-            ca : [fs.readFileSync(path.join(key_path,client_pem))],//we are using a self signed cert
-            host : host,
-            port : port,
-            https_port : https_port,
-        };
-
+        //Setup client and main server ids.
         this.ids = {
             client_id : id,
             server_id : server_id,
@@ -169,6 +170,13 @@ class client_server_connection{
 
         this.free_tickets = 0;
 
+        //Setup TLS options and connect to the client_server
+        this.options = {
+            ca : [fs.readFileSync(path.join(key_path,client_pem))],//we are using a self signed cert
+            host : host,
+            port : port,
+            https_port : https_port,
+        };
         this.connect();
     }
 
@@ -180,7 +188,7 @@ class client_server_connection{
 
         let request = this.ids;
 
-        //once successfully connected send over the INIT request to start authorisation check.
+        //On connection send server ID information.
         socket.on("secureConnect",()=>{
            this.send({
                cmd : "INIT",
@@ -188,11 +196,14 @@ class client_server_connection{
            });
         });
 
+        //Setup remaining socket events.
         socket.on("data",(data)=>{
             this.update(data);
         });
 
-        socket.on("error",(error)=>{console.log(error)});
+        socket.on("error",(error)=>{
+            console.log(error);
+        });
     }
 
     /**
@@ -200,7 +211,17 @@ class client_server_connection{
      * @param data the data sent by the client_server
      */
     update(data){
-        let message = JSON.parse(data.toString());
+        let message;
+
+        //Check for correctly formatted JSON.
+        try {
+            message = JSON.parse(data.toString());
+        }catch(error){
+            console.log(`Invalid message received from client_server ${data.toString()}`);
+            return;
+        }
+
+        //Handle received message command.
         switch(message.cmd){
             default:
                 console.log(`Invalid command ${message.cmd} received from client ${this.ids.client_id}`);
@@ -222,13 +243,14 @@ class client_server_connection{
             case "FREE_TICKETS":
                 this.free_tickets = message.length;
                 return;
-
         }
     }
 
     /*
     ticket code
      */
+
+    //Send the list of assigned tickets to the client_server.
     send_tickets(tickets){
         this.send({
             cmd : "TICKETS",
@@ -240,6 +262,7 @@ class client_server_connection{
     End of code for tickets
      */
 
+    //Send an object to the client_server.
     send(data){
         if(!this.socket){
             console.log("Cannot send to client, no socket exists");
@@ -269,36 +292,37 @@ let completed = [];//list of connections that have complete the form
  * @returns {*}
  */
 function request_redirect(connection){
-
+    //Check if web_client has completed a ticket and redirect if necessary.
     if(completed.includes(connection)){
-        //send them back to the homepage
         //TODO add homepage.
         return null;
     }
 
+    //Check if the web_client is already connected or queued to the connect to a client_server.
     if(connected.includes(connection) || queue.includes(connection)){
-        return null;//if they've already completed the form , already connected or are connecting then dont allowing them
-        //to connect again.
+        return null;
     }
 
     let chosen_server;
     let most_tickets = 0;
 
+    //Assign the web_client to the server with the most free tickets.
     for(let client_server of client_connections){
-
-        if(client_server.free_tickets > most_tickets || most_tickets < 0){//select the client_server with the most free tickets
+        if(client_server.free_tickets > most_tickets || most_tickets < 0){
             chosen_server = client_server;
             most_tickets = client_server.free_tickets;
         }
     }
 
+    //Refuse to redirect if no client has free tickets.
     if(!chosen_server){
         console.log("Error, no client chosen for redirect");
+        //TODO redirect to homepage.
         return null;
     }
 
-    queue.push(connection);//prevent the user from connecting multiple times before fully redirected putting
-    //them in multiple queues.
+    //Add the web_client to the redirection queue and return the address of the selected client_server.
+    queue.push(connection);
 
     return "https://" + chosen_server.options.host + ":" + chosen_server.options.https_port;
 }
