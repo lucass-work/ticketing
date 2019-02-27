@@ -26,11 +26,9 @@ main_server.connect_client_server("localhost",TLS_PORT,HTTPS_PORT,()=>{
 });
 ```
 
-Where we have ```javascript connect_client_server(host,TLS_PORT,HTTPS_PORT, callback)```, the HTTPS_PORT is used to redirect
-web_clients when they have been assigned to this server. 
 Callback is called once a connection is fully established between the main_server and client_server, in this case it is being used 
 to generate tickets and distribute them between the servers.
-
+Where
 If we wish to handle redirection we can use the redirect_server module.
 
 ```javascript
@@ -39,7 +37,7 @@ let redirect_server = require('./redirect_server');
 redirect_server.create_server();
 ```
 
-As noted in _Plans_ this is implemented directly with the main_server module and will change.
+As noted in _TODO_ this is implemented directly with the main_server module and will change.
 
 ### Certificates ###
 
@@ -72,6 +70,7 @@ client_server.set_certificate_path(path);
 
 ## TODO ##
 
+* Make fully aysnchronous.
 * Make all server modules use classes , currently they are handled directly inside modules.
 * Fully implement web_client side, mainly used for testing currently.
 * Allow for custom commands to be added to client_server main_server communication.
