@@ -13,10 +13,7 @@ let auth = require('./auth');
 let main_server_socket,//connection to the main_server
     main_server;
 
-let client_id,
-    client_auth,
-    server_id,
-    server_auth;
+let client_id,server_id
 
 let key_path = path.join(__dirname,"../keys");//SSL keys file path
 
@@ -52,12 +49,14 @@ function create_client_server(port,options = server_options){
         options = {
             key : fs.readFileSync(path.join(key_path,"/client_key.pem")),
             cert : fs.readFileSync(path.join(key_path, "/client_cert.pem")),
-            rejectUnauthorized : false,//we are using a self signed certificate but use a real one if actually used.
         };
     }
 
+    /*
+    The main_server actually connects to each of the clients, this connection is the "main_server"
+     */
     main_server = tls.createServer(options,(socket)=>{
-        if(main_server_socket){//We only connect to a single main server.
+        if(main_server_socket){//only allow one server to exist at once
             console.log("New connection attempted, rejecting.");
             socket.destroy();
             return;
@@ -96,6 +95,9 @@ function server_update(data){
         case "TICKETS":
             setup_tickets(options);
             return;
+
+        default:
+            console.log(`Invalid command ${options.cmd} send to client server ${client_id}.`);
     }
 }
 
@@ -124,8 +126,6 @@ Ticket handling
 
 let ticket = require('../tickets/tickets');
 let tickets = [];
-
-//initialise tickets
 
 /**
  * setup the ticket module and our tickets array
@@ -173,7 +173,7 @@ function send_free(){
 }
 
 /*
-web_client interaction happens below
+web_client interaction
  */
 
 let ws = require('ws');
@@ -189,10 +189,12 @@ const https_options = {
 };
 
 /*
-preloaded HTML form
+preloaded the ticket page
  */
 const __root = path.join(__dirname,"../client");
 let ticket_page = fs.readFileSync(path.join(__dirname,"../client/ticket_page.html"));
+
+//web_client https/wss server
 
 /**
  * Initialises the HTTPS server and WSS server on the same port.
@@ -236,7 +238,11 @@ function create_https_server(port = https_port, options = https_options){
 
 }
 
-
+/**
+ * Add a web_client to the list of connections.
+ * @param socket
+ * @param ip
+ */
 function add_web_client(socket,ip){
     if(!main_server_socket){
         console.log("No TLS server exists");
@@ -284,6 +290,9 @@ function remove_web_client(web_client){
     })
 }
 
+/**
+ * Disconnect all web_clients.
+ */
 function clear_web_clients(){
     for(let client of web_clients){
         remove_web_client(client);
@@ -306,7 +315,7 @@ class web_client{
             closed : false,
         };
 
-        client_tokens.push(token);
+        client_tokens.push(token);//TODO implement token authorisation.
         this.set_socket(socket);
 
         send_main({//Alert the main_server that redirection was successful.

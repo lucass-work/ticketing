@@ -7,7 +7,7 @@ let sql = require('mysql');
 Ticket handling code
  */
 
-let tickets = [];//each ticket is an id associated with an entry in the SQL database //todo SQL stuff.
+let tickets = [];//each ticket is an id associated with an entry in the SQL database
 let ticket_ids = [];
 let ticket_info = {};
 /**
@@ -229,5 +229,5 @@ module.exports = {
     load_tickets : load_tickets,
     set_ticket : set_ticket,
     get_free_length : get_free_length,
-
+    set_sql_ticket : set_sql_ticket,
 };

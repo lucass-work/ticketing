@@ -7,68 +7,7 @@ let auth = require('./auth');
 let tickets = require('../tickets/tickets');
 let util = require('../util/util');
 
-
-/*
-Client handling
- */
-
-let client_connections = [];//list of client_server_connections
-let client_ids = [];//list of used client_server id's.
-
-//setup main server auth codes
-let server_id = auth.gen_id([]);
-client_ids.push(server_id);//so that we dont get conflicts with client ids.
-
-//location of SSL certificates.
-let key_path = path.join(__dirname,"../","/keys");
-
-/**
- * Sets the path to locate SSL Certificates.
- * @param path
- */
-function set_certificate_path(cert_path){
-    key_path = cert_path;
-}
-
-/**
- * Connects a client server and adds it to the connection list
- * @host the host of the client
- * @port the port of the client
- * @https_port the https_server port
- * @callback a callback function called when the server is successfully authorised.
- * @returns client id.
- */
-function connect_client_server(host,port,https_port,callback){
-
-    let client_id = auth.gen_id(client_ids);
-
-    client_ids.push(client_id);
-
-    let client_connection = new client_server_connection(client_id,host,port,https_port,callback);
-    client_connections.push(client_connection);
-}
-
-/**
- * Removes a client without disconnecting them.
- * @param id the client id
- */
-function disconnect_client(id){
-    //remove the client and client id from the lists.
-    let index = client_connections.findIndex((el) => {return el.options.id === id});
-
-    if(index === -1){
-        return;
-    }
-
-    let client = client_connections[index];
-    client_connections.splice(index,1);
-
-    for(let i = 0;i < client_ids.length;i++){
-        if(client_ids[i] === id){ client_ids.splice(i,1) };
-    }
-    //get the client to disconnect.
-    client.disconnect();
-}
+let server_id = auth.gen_id([]);//this servers ID.
 
 /*
 Ticket code
@@ -85,14 +24,16 @@ function distribute_tickets(){
     }
 
     let ticket = tickets.get_tickets();
-    let tickets_per = Math.floor(ticket.length / client_connections.length);//all excess tickets are given to the first server.
+    let tickets_per = Math.floor(ticket.length / client_connections.length);
     let current_ticket = 0;
 
+    //distribute tickets amongst the servers as evenly as possible.
     for(let client of client_connections){
         client.send_tickets(ticket.slice(current_ticket,current_ticket + tickets_per));
         current_ticket += tickets_per;
     }
 
+    //send remaining tickets to the first server.
     if(current_ticket !== ticket.length){
         client_connections[0].send_tickets(ticket.slice(current_ticket,ticket.length));
     }
@@ -108,7 +49,6 @@ function distribute_tickets(){
 function init_tickets(name,desc,cost,amount){
     tickets.set_ticket_info(name,desc,cost);
     tickets.generate_tickets(amount);
-    /**/
 }
 
 /**
@@ -131,10 +71,78 @@ function complete_ticket(client) {
 }
 
 
+/*
+Handles client connection and disconnection
+ */
+
+let client_connections = [];//list of client_server_connections
+let client_ids = [];//list of used client_server id's.
+client_ids.push(server_id);//prevent servers from being assigned this servers id.
+
+/**
+ * Connects a client server and adds it to the connection list
+ * @host the host of the client
+ * @port the port of the client
+ * @https_port the https_server port
+ * @callback a callback function called when the server is successfully authorised.
+ * @returns client id.
+ */
+function connect_client_server(host,port,https_port,callback){
+
+    //generate a client id and then add to the list of connected clients.
+    let client_id = auth.gen_id(client_ids);
+
+    client_ids.push(client_id);
+
+    let client_connection = new client_server_connection(client_id,host,port,https_port,callback,cert_authority);
+    client_connections.push(client_connection);
+}
+
+/**
+ * Removes a client without disconnecting them.
+ * @param id the client id
+ */
+function disconnect_client(id){
+    //remove the client and client id from the lists.
+    let index = client_connections.findIndex((el) => {return el.options.id === id});
+
+    if(index === -1){
+        return;
+    }
+
+    let client = client_connections[index];
+    client_connections.splice(index,1);
+
+    for(let i = 0; i < client_ids.length; i++){
+        if(client_ids[i] === id){ client_ids.splice(i,1) };
+    }
+    //get the client to disconnect.
+    client.disconnect();
+}
 
 /*
 Handles interaction with an individual client server
  */
+
+//location of client TSL certificates.
+let key_path = path.join(__dirname,"../","/keys");
+let cert_authority = "/client.pem";
+
+
+/**
+ * Sets the path to locate SSL Certificates.
+ * @param path
+ */
+function set_certificate_path(cert_path){
+    key_path = cert_path;
+}
+
+/**
+ * Set the certificate authority used to connect to the client_server
+ */
+function set_certificate_authority(cert_name){
+    cert_authority = cert_name;
+}
 
 class client_server_connection{
     /**
@@ -146,7 +154,7 @@ class client_server_connection{
      * @param client_pem , client certificate authority. Defaults to "client.pem"
      * @param callback, called when successfully authorised
      */
-    constructor(id,host,port,https_port,callback,client_pem="client.pem"){
+    constructor(id,host,port,https_port,callback,client_pem){
         this.options = {
             ca : [fs.readFileSync(path.join(key_path,client_pem))],//we are using a self signed cert
             host : host,
@@ -247,7 +255,8 @@ on the number of tickets still free on that server.
  */
 
 /*
-web client handling, handles redirects and interaction from redirect_server.js
+web client handling, handles interaction from redirect_server.js and prevents some of the multiple connections if a session
+already exists.
  */
 
 let connected = [];//list of currently connected across all servers
@@ -305,7 +314,6 @@ function web_client_connected(ip){
     }
 }
 
-
 /**
  * moved the client from the connected to the completed.
  * @param ip
@@ -332,5 +340,7 @@ module.exports = {
     request_redirect : request_redirect,
     init_tickets : init_tickets,
     set_certificate_path : set_certificate_path,
+    set_certificate_authority : set_certificate_authority,
+    init_tickets_SQL : init_tickets_SQL,
 };
 

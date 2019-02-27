@@ -1,7 +1,7 @@
 "use strict";
 
 /*
-Util methods, TODO move these to proper prototypes.
+Util methods
  */
 
 /**
