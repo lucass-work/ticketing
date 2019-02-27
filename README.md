@@ -70,6 +70,7 @@ client_server.set_certificate_path(path);
 
 ## TODO ##
 
+* Make fully aysnchronous.
 * Make all server modules use classes , currently they are handled directly inside modules.
 * Fully implement web_client side, mainly used for testing currently.
 * Allow for custom commands to be added to client_server main_server communication.
